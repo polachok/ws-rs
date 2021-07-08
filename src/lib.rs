@@ -19,7 +19,7 @@ extern crate url;
 #[macro_use]
 extern crate log;
 
-mod capped_buffer;
+mod circular_buffer;
 mod communication;
 mod connection;
 mod factory;
@@ -166,14 +166,16 @@ pub struct Settings {
     /// fewer reallocations.
     /// Default: 2048
     pub in_buffer_capacity: usize,
-    /// The maximum size to which the incoming buffer can grow.
+    /// The maximum size to which the incoming buffer can grow. This is a hard limit, and anything
+    /// written to the buffer over this limit will result in an error.
     /// Default: 10,485,760
     pub max_in_buffer_capacity: usize,
     /// The initial size of the outgoing buffer. A larger buffer uses more memory but will allow for
     /// fewer reallocations.
     /// Default: 2048
     pub out_buffer_capacity: usize,
-    /// The maximum size to which the outgoing buffer can grow.
+    /// The maximum size to which the outgoing buffer can grow. This is a hard limit, and anything
+    /// written to the buffer over this limit will result in an error.
     /// Default: 10,485,760
     pub max_out_buffer_capacity: usize,
     /// Whether to panic when an Internal error is encountered. Internal errors should generally
