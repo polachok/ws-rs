@@ -127,6 +127,7 @@ where
 }
 
 /// WebSocket settings
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub struct Settings {
     /// The maximum number of connections that this WebSocket will support.

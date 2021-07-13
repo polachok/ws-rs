@@ -54,11 +54,11 @@ fn main() {
         }
     }
 
+    let mut settings = Settings::default();
+    settings.max_connections = CONNECTIONS;
+
     let mut ws = Builder::new()
-        .with_settings(Settings {
-            max_connections: CONNECTIONS,
-            ..Settings::default()
-        })
+        .with_settings(settings)
         .build(|out| Connection {
             out,
             count: 0,
