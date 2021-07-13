@@ -30,8 +30,6 @@ use self::State::*;
 
 use super::Settings;
 
-const BUFFER_CAPACITY_SOFT_LIMIT: usize = 1024 * 1024;
-
 #[derive(Debug)]
 pub enum State {
     // Tcp connection accepted, waiting for handshake to complete
@@ -125,11 +123,11 @@ where
             fragments: VecDeque::with_capacity(settings.fragments_capacity),
             in_buffer: CircularBuffer::new(
                 settings.in_buffer_capacity,
-                settings.max_in_buffer_capacity,
+                settings.in_buffer_capacity_hard_limit,
             ),
             out_buffer: CircularBuffer::new(
                 settings.out_buffer_capacity,
-                settings.max_out_buffer_capacity,
+                settings.out_buffer_capacity_hard_limit,
             ),
             handler,
             addresses: Vec::new(),
@@ -977,7 +975,7 @@ where
         }
 
         if self.in_buffer.is_empty() {
-            self.in_buffer.apply_soft_limit(BUFFER_CAPACITY_SOFT_LIMIT);
+            self.in_buffer.apply_soft_limit(self.settings.in_buffer_capacity_soft_limit);
         }
         Ok(())
     }
@@ -1000,7 +998,7 @@ where
                 if let Some(len) = self.socket.try_write_buf(&mut self.out_buffer)? {
                     trace!("Wrote {} bytes to {}", len, self.peer_addr());
                     if self.out_buffer.is_empty() {
-                        self.out_buffer.apply_soft_limit(BUFFER_CAPACITY_SOFT_LIMIT);
+                        self.out_buffer.apply_soft_limit(self.settings.out_buffer_capacity_soft_limit);
                     }
 
                     let finished = len == 0 || self.out_buffer.is_empty();
