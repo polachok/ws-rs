@@ -141,17 +141,12 @@ impl CircularBuffer {
 
     pub fn apply_soft_limit(&mut self, limit: usize) {
         let limit = std::cmp::min(limit, self.max_capacity);
-        if self.remaining() > limit || self.current_capacity() <= limit {
-            return;
-        }
-
-        if self.remaining() == 0 {
+        if self.remaining() == 0 && self.current_capacity() > limit {
             self.buffer = Vec::new().into_boxed_slice();
             self.position = 0;
-            return;
+        } else if self.remaining() <= limit / 2 && self.current_capacity() >= 2 * limit {
+            self.resize_buffer(limit);
         }
-
-        self.resize_buffer(limit);
     }
 }
 
@@ -337,6 +332,35 @@ mod test {
     }
 
     #[test]
+    fn resize_buffer() {
+        let mut b = CircularBuffer::new(0, 16);
+        b.write_all(b"0123456789ABCDEF").unwrap();
+        assert_eq!(b.current_capacity(), 16);
+
+        b.resize_buffer(16);
+        assert_eq!(b.current_capacity(), 16);
+        assert_eq!(b.bytes(), b"0123456789ABCDEF");
+
+        b.advance(1);
+        b.resize_buffer(16);
+        assert_eq!(b.current_capacity(), 16);
+        assert_eq!(b.bytes(), b"123456789ABCDEF");
+
+        b.resize_buffer(15);
+        assert_eq!(b.current_capacity(), 15);
+        assert_eq!(b.bytes(), b"123456789ABCDEF");
+
+        b.advance(15);
+        b.resize_buffer(15);
+        assert_eq!(b.current_capacity(), 15);
+        assert_eq!(b.bytes(), b"");
+
+        b.resize_buffer(0);
+        assert_eq!(b.current_capacity(), 0);
+        assert_eq!(b.bytes(), b"");
+    }
+
+    #[test]
     fn apply_soft_limit() {
         let mut b = CircularBuffer::new(0, 16);
         b.write_all(b"0123456789ABCDEF").unwrap();
@@ -346,25 +370,33 @@ mod test {
         assert_eq!(b.current_capacity(), 16);
         assert_eq!(b.bytes(), b"0123456789ABCDEF");
 
-        b.advance(1);
-        b.apply_soft_limit(16);
+        b.apply_soft_limit(0);
         assert_eq!(b.current_capacity(), 16);
-        assert_eq!(b.bytes(), b"123456789ABCDEF");
+        assert_eq!(b.bytes(), b"0123456789ABCDEF");
 
-        b.apply_soft_limit(15);
-        assert_eq!(b.current_capacity(), 15);
-        assert_eq!(b.bytes(), b"123456789ABCDEF");
-
+        b.advance(8);
         b.apply_soft_limit(8);
-        assert_eq!(b.current_capacity(), 15);
-        assert_eq!(b.bytes(), b"123456789ABCDEF");
+        assert_eq!(b.current_capacity(), 16);
+        assert_eq!(b.bytes(), b"89ABCDEF");
 
-        b.advance(15);
-        b.apply_soft_limit(15);
-        assert_eq!(b.current_capacity(), 15);
+        b.advance(3);
+        b.apply_soft_limit(8);
+        assert_eq!(b.current_capacity(), 16);
+        assert_eq!(b.bytes(), b"BCDEF");
+
+        b.advance(1);
+        b.apply_soft_limit(8);
+        assert_eq!(b.current_capacity(), 8);
+        assert_eq!(b.bytes(), b"CDEF");
+
+        b.advance(4);
+        b.apply_soft_limit(8);
+        assert_eq!(b.current_capacity(), 8);
         assert_eq!(b.bytes(), b"");
 
-        b.apply_soft_limit(14);
+        assert!(b.write_all(b"0123456789ABCDEF").is_ok());
+        b.advance(16);
+        b.apply_soft_limit(8);
         assert_eq!(b.current_capacity(), 0);
         assert_eq!(b.bytes(), b"");
     }
