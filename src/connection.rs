@@ -428,15 +428,20 @@ where
                         }
                     }
                     Kind::Capacity => {
+                        println!("capacity error");
                         if self.settings.panic_on_capacity {
                             panic!("Panicking on capacity error -- {}", err);
                         }
-                        let reason = format!("{}", err);
+                        //let reason = format!("{}", err);
 
                         self.handler.on_error(err);
+                        /*
                         if let Err(err) = self.send_close(CloseCode::Size, reason) {
                             self.handler.on_error(err);
                         }
+                        */
+                        self.state = FinishedClose;
+
                         self.disconnect()
                     }
                     Kind::Protocol => {
@@ -608,7 +613,8 @@ where
                         // TODO: see if this can be optimized with drain
                         let end = {
                             let data = res.get_ref();
-                            let end = data.iter()
+                            let end = data
+                                .iter()
                                 .enumerate()
                                 .take_while(|&(ind, _)| !data[..ind].ends_with(b"\r\n\r\n"))
                                 .count();
@@ -767,8 +773,10 @@ where
                             if !self.fragments.is_empty() {
                                 return Err(Error::new(Kind::Protocol, "Received unfragmented text frame while processing fragmented message."));
                             }
-                            let msg = Message::text(String::from_utf8(frame.into_data())
-                                .map_err(|err| err.utf8_error())?);
+                            let msg = Message::text(
+                                String::from_utf8(frame.into_data())
+                                    .map_err(|err| err.utf8_error())?,
+                            );
                             self.handler.on_message(msg)?;
                         }
                         OpCode::Binary => {
@@ -1044,7 +1052,8 @@ where
         trace!("Message opcode {:?}", opcode);
         let data = msg.into_data();
 
-        if let Some(frame) = self.handler
+        if let Some(frame) = self
+            .handler
             .on_send_frame(Frame::message(data, opcode, true))?
         {
             if frame.payload().len() > self.settings.fragment_size {
@@ -1162,7 +1171,8 @@ where
             self.peer_addr()
         );
 
-        if let Some(frame) = self.handler
+        if let Some(frame) = self
+            .handler
             .on_send_frame(Frame::close(code, reason.borrow()))?
         {
             self.buffer_frame(frame)?;
