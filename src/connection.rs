@@ -442,6 +442,7 @@ where
                         */
                         self.state = FinishedClose;
 
+                        let _ = self.socket.evented().shutdown(std::net::Shutdown::Both);
                         self.disconnect()
                     }
                     Kind::Protocol => {
@@ -502,8 +503,7 @@ where
                 self.handler.on_close(CloseCode::Abnormal, "");
             }
         }
-        //self.events = Ready::empty();
-        let _ = self.socket.evented().shutdown(std::net::Shutdown::Both);
+        self.events = Ready::empty();
     }
 
     pub fn consume(self) -> H {
