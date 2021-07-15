@@ -502,7 +502,8 @@ where
                 self.handler.on_close(CloseCode::Abnormal, "");
             }
         }
-        self.events = Ready::empty()
+        //self.events = Ready::empty();
+        let _ = self.socket.evented().shutdown(std::net::Shutdown::Both);
     }
 
     pub fn consume(self) -> H {
