@@ -431,13 +431,16 @@ where
                         if self.settings.panic_on_capacity {
                             panic!("Panicking on capacity error -- {}", err);
                         }
-                        let reason = format!("{}", err);
+                        //let reason = format!("{}", err);
 
                         self.handler.on_error(err);
                         let _ = self.socket.evented().shutdown(std::net::Shutdown::Both);
+                        /*
                         if let Err(err) = self.send_close(CloseCode::Size, reason) {
                             self.handler.on_error(err);
                         }
+                        */
+                        self.state = State::FinishedClose;
                         self.disconnect()
                     }
                     Kind::Protocol => {
