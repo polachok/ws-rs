@@ -29,7 +29,7 @@ const SYSTEM: Token = Token(usize::MAX - 6);
 type Conn<F> = Connection<<F as Factory>::Handler>;
 
 const MAX_EVENTS: usize = 1024;
-const MESSAGES_PER_TICK: usize = 256;
+const MESSAGES_PER_TICK: usize = 8; //256;
 const TIMER_TICK_MILLIS: u64 = 100;
 const TIMER_WHEEL_SIZE: usize = 1024;
 const TIMER_CAPACITY: usize = 65_536;
@@ -654,9 +654,7 @@ where
                 }
                 if is_writable {
                     trace!("something is writable");
-                    for _ in 0..1
-                    /*MESSAGES_PER_TICK */
-                    {
+                    for _ in 0..MESSAGES_PER_TICK {
                         match self.queue_rx.try_recv() {
                             Ok(cmd) => self.handle_queue(poll, cmd),
                             _ => break,
