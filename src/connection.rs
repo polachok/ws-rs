@@ -98,6 +98,8 @@ where
 
     settings: Settings,
     connection_id: u32,
+
+    is_writable: bool,
 }
 
 impl<H> Connection<H>
@@ -133,7 +135,12 @@ where
             addresses: Vec::new(),
             settings,
             connection_id,
+            is_writable: false,
         }
+    }
+
+    pub fn is_writable(&self) -> bool {
+        self.is_writable
     }
 
     pub fn as_server(&mut self) -> Result<()> {
@@ -606,7 +613,8 @@ where
                         // TODO: see if this can be optimized with drain
                         let end = {
                             let data = res.get_ref();
-                            let end = data.iter()
+                            let end = data
+                                .iter()
                                 .enumerate()
                                 .take_while(|&(ind, _)| !data[..ind].ends_with(b"\r\n\r\n"))
                                 .count();
@@ -765,8 +773,10 @@ where
                             if !self.fragments.is_empty() {
                                 return Err(Error::new(Kind::Protocol, "Received unfragmented text frame while processing fragmented message."));
                             }
-                            let msg = Message::text(String::from_utf8(frame.into_data())
-                                .map_err(|err| err.utf8_error())?);
+                            let msg = Message::text(
+                                String::from_utf8(frame.into_data())
+                                    .map_err(|err| err.utf8_error())?,
+                            );
                             self.handler.on_message(msg)?;
                         }
                         OpCode::Binary => {
@@ -974,11 +984,14 @@ where
             }
         }
 
-        self.in_buffer.apply_soft_limit(self.settings.in_buffer_capacity_soft_limit);
+        self.in_buffer
+            .apply_soft_limit(self.settings.in_buffer_capacity_soft_limit);
         Ok(())
     }
 
     pub fn write(&mut self) -> Result<()> {
+        self.is_writable = true;
+
         if self.socket.is_negotiating() {
             trace!("Performing TLS negotiation on {}.", self.peer_addr());
             self.socket.clear_negotiating()?;
@@ -991,23 +1004,34 @@ where
                 trace!("Ready to write messages to {}.", self.peer_addr());
 
                 // Start out assuming that this write will clear the whole buffer
-                self.events.remove(Ready::writable());
+                //self.events.remove(Ready::writable());
 
-                if let Some(len) = self.socket.try_write_buf(&mut self.out_buffer)? {
-                    trace!("Wrote {} bytes to {}", len, self.peer_addr());
-                    self.out_buffer.apply_soft_limit(self.settings.out_buffer_capacity_soft_limit);
+                loop {
+                    use bytes::Buf;
+                    if self.out_buffer.remaining() == 0 {
+                        break;
+                    }
+                    if let Some(len) = self.socket.try_write_buf(&mut self.out_buffer)? {
+                        trace!("Wrote {} bytes to {}", len, self.peer_addr());
+                        self.out_buffer
+                            .apply_soft_limit(self.settings.out_buffer_capacity_soft_limit);
 
-                    let finished = len == 0 || self.out_buffer.is_empty();
-                    if finished {
-                        match self.state {
-                            // we are are a server that is closing and just wrote out our confirming
-                            // close frame, let's disconnect
-                            FinishedClose if self.is_server() => {
-                                self.events = Ready::empty();
-                                return Ok(());
+                        let finished = len == 0 || self.out_buffer.is_empty();
+                        if finished {
+                            match self.state {
+                                // we are are a server that is closing and just wrote out our confirming
+                                // close frame, let's disconnect
+                                FinishedClose if self.is_server() => {
+                                    self.events = Ready::empty();
+                                    return Ok(());
+                                }
+                                _ => (),
                             }
-                            _ => (),
                         }
+                    } else {
+                        //info!("would block");
+                        self.is_writable = false;
+                        break;
                     }
                 }
 
@@ -1038,7 +1062,8 @@ where
         trace!("Message opcode {:?}", opcode);
         let data = msg.into_data();
 
-        if let Some(frame) = self.handler
+        if let Some(frame) = self
+            .handler
             .on_send_frame(Frame::message(data, opcode, true))?
         {
             if frame.payload().len() > self.settings.fragment_size {
@@ -1156,7 +1181,8 @@ where
             self.peer_addr()
         );
 
-        if let Some(frame) = self.handler
+        if let Some(frame) = self
+            .handler
             .on_send_frame(Frame::close(code, reason.borrow()))?
         {
             self.buffer_frame(frame)?;
@@ -1191,6 +1217,15 @@ where
     }
 
     fn check_buffer_out(&mut self, frame: &Frame) -> Result<()> {
+        use bytes::Buf;
+        /*
+        info!(
+            "len: {} remaining: {} frame {}",
+            self.out_buffer.remaining(),
+            self.out_buffer.remaining_mut(),
+            frame.len()
+        );
+        */
         if self.out_buffer.remaining_mut() < frame.len() {
             return Err(Error::new(
                 Kind::Capacity,
