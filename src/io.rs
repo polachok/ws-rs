@@ -916,9 +916,9 @@ where
                 }
 
                 if self.connections.get(token.into()).is_some() {
-                    if let Err(err) = self.schedule(poll, &self.connections[token.into()]) {
-                        self.connections[token.into()].error(err)
-                    }
+                    let events = self.connections[token.into()].events();
+                    let active = events.is_writable() || events.is_readable();
+                    self.check_active(poll, active, token);
                 }
             }
         }
